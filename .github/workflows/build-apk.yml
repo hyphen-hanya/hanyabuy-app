@@ -44,6 +44,8 @@ jobs:
             grep -niE "BUILD FAILED|what went wrong|caused by:|minimum supported|could not (resolve|find)|FAILURE: Build failed|Execution failed" build_stdout.log | sed 's/^/::error::/'
             echo "::error::===== KOTLIN/COMPILE ERRORS (e:/error:/.kt:line) ====="
             grep -niE "\.kt:[0-9]+|e: |error:|unresolved reference|type mismatch|expecting|Kotlin:|arguments|inferred type|The expression" build_stdout.log | sed 's/^/::error::/' | head -40
+            echo "::error::===== FULL ERROR CONTEXT (compilename area) ====="
+            awk '/compileDebugKotlin|Compilation error|CompilationException/,/^[0-9]+:BUILD (FAILED|SUCCESSFUL)/' build_stdout.log | sed 's/^/::error::/' | tail -50
             echo "::error::===== TAIL 60 ====="
             tail -n 60 build_stdout.log | sed 's/^/::error::/'
           else
