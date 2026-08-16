@@ -1,4 +1,4 @@
-// 顶层 settings - 韩亚Buy App
+// 顶层 settings - 韩亚Buy App (极简, 最稳)
 pluginManagement {
     repositories {
         google()

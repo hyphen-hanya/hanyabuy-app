@@ -1,20 +1,12 @@
-// 韩亚Buy App - app 模块 Gradle 配置 (Groovy DSL)
+// 韩亚Buy App - app 模块 (Groovy DSL, 保守配置)
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
 }
 
-// 依赖仓库 (classic 写法, 最稳)
 repositories {
     google()
     mavenCentral()
-}
-
-// 读取签名配置 (keystore.properties 由 CI 注入, 不提交仓库)
-def keystorePropertiesFile = rootProject.file("keystore.properties")
-def keystoreProperties = new Properties()
-if (keystorePropertiesFile.exists()) {
-    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
 
 android {
@@ -23,35 +15,18 @@ android {
 
     defaultConfig {
         applicationId "com.hanyabuy.app"
-        minSdk 24          // Android 7.0+, 覆盖绝大多数设备
+        minSdk 24
         targetSdk 34
         versionCode 1
         versionName "1.0.0"
     }
 
-    signingConfigs {
-        if (keystoreProperties.containsKey("storeFile")) {
-            release {
-                storeFile file(keystoreProperties["storeFile"])
-                storePassword keystoreProperties["storePassword"]
-                keyAlias keystoreProperties["keyAlias"]
-                keyPassword keystoreProperties["keyPassword"]
-            }
-        }
-    }
-
     buildTypes {
-        debug {
-        }
         release {
-            minifyEnabled false   // WebView 无原生 bridge, 不需混淆
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (keystoreProperties.containsKey("storeFile")) {
-                signingConfig signingConfigs.release
-            }
         }
     }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

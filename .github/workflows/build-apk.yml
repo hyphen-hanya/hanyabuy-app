@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:      # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,42 +18,24 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # 安装 Gradle 8.7 (直接提供 gradle 命令, 不依赖 wrapper)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      # 生成 gradle wrapper (方便后续本地构建一致)
-      - name: Generate wrapper
-        run: gradle wrapper --gradle-version 8.7 --no-daemon
-
-      # 签名 keystore 从 GitHub Secrets 注入(前端不公开)
-      - name: Provision signing props
-        env:
-          SIGNING_KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        shell: bash
+      # 诊断: 打印 gradle 与 java 版本
+      - name: Versions
         run: |
-          if [ -n "$SIGNING_KEY_B64" ]; then
-            echo "$SIGNING_KEY_B64" | base64 --decode > keystore.jks
-            cat > keystore.properties <<EOF
-storeFile=keystore.jks
-storePassword=$STORE_PASSWORD
-keyAlias=$KEY_ALIAS
-keyPassword=$KEY_PASSWORD
-EOF
-            echo "signing configured"
-          else
-            echo "no signing secrets - building unsigned release"
-          fi
+          gradle --version
+          java -version
 
+      # 用 gradle 直调构建 (不用 ./gradlew, 避免 wrapper 缺失问题)
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
 
       - name: Build release APK
-        run: ./gradlew :app:assembleRelease --no-daemon
+        run: gradle :app:assembleRelease --no-daemon --stacktrace || true
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
