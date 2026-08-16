@@ -1,2 +1,11 @@
+// 顶层 settings - 韩亚Buy App
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
 rootProject.name = "hanyabuy"
 include ':app'
