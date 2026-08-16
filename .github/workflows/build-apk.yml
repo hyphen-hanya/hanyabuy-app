@@ -12,23 +12,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Gradle & JDK
+      # JDK 必须单独用 setup-java 设置 (setup-gradle 不接收 java-version)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
-          java-version: "17"
 
-      # 构建 debug APK, 完整日志落盘
+      # 构建 debug APK, 完整日志落盘 (不 || true, 让失败真正暴露; 用 continue-on-error 保持后续诊断步骤运行)
       - name: Build debug APK
         id: build
+        continue-on-error: true
         run: |
-          gradle :app:assembleDebug --no-daemon --stacktrace --info > build_stdout.log 2>&1 || true
+          gradle :app:assembleDebug --no-daemon --stacktrace --info > build_stdout.log 2>&1
           echo "GRADLE_EXIT=$?" >> "$GITHUB_ENV"
+          echo "done"
 
-      # 用 ::error:: 工作流命令, 让真实错误成为"annotation", 会显示在 run 总结页(可匿名读取)
-      - name: Report Gradle error as annotation
-        if: failure() || env.GRADLE_EXIT != '0' || always()
+      # 把真实错误用 ::error:: 喷成 annotation(run总结页可读)
+      - name: Report Gradle result as annotation
+        id: report
         run: |
+          echo "GRADLE_EXIT=$GRADLE_EXIT"
           if [ "$GRADLE_EXIT" != "0" ]; then
             echo "::error::GRADLE build failed (exit $GRADLE_EXIT)"
             echo "::error::===== BUILD RESULT ====="
