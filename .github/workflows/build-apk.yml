@@ -18,19 +18,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 安装 Gradle 8.7 (直接提供 gradle 命令, 不依赖 wrapper)
+      # 安装 Gradle 8.7 (与 wrapper 的 gradle-8.7-bin.zip 一致)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      # 诊断: 打印 gradle 与 java 版本
       - name: Versions
         run: |
-          gradle --version
           java -version
+          gradle --version
 
-      # 用 gradle 直调构建 (不用 ./gradlew, 避免 wrapper 缺失问题)
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
