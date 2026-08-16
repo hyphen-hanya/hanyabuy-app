@@ -42,8 +42,8 @@ jobs:
             echo "::error::GRADLE build failed (exit $GRADLE_EXIT)"
             echo "::error::===== BUILD RESULT ====="
             grep -niE "BUILD FAILED|what went wrong|caused by:|minimum supported|could not (resolve|find)|FAILURE: Build failed|Execution failed" build_stdout.log | sed 's/^/::error::/'
-            echo "::error::===== KOTLIN/COMPILE ERRORS (e:/error:) ====="
-            grep -niE "^e: |error:|unresolved reference|type mismatch|expecting|Kotlin:|MyBatis" build_stdout.log | sed 's/^/::error::/' | head -30
+            echo "::error::===== KOTLIN/COMPILE ERRORS (e:/error:/.kt:line) ====="
+            grep -niE "\.kt:[0-9]+|e: |error:|unresolved reference|type mismatch|expecting|Kotlin:|arguments|inferred type|The expression" build_stdout.log | sed 's/^/::error::/' | head -40
             echo "::error::===== TAIL 60 ====="
             tail -n 60 build_stdout.log | sed 's/^/::error::/'
           else
