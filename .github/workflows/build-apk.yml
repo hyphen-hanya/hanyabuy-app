@@ -18,30 +18,32 @@ jobs:
           gradle-version: "8.7"
           java-version: "17"
 
-      # 构建 debug APK, 把完整日志落盘, 让 GITHUB_ENV 记录退出码
+      # 构建 debug APK, 完整日志落盘
       - name: Build debug APK
         id: build
         run: |
-          gradle :app:assembleDebug --no-daemon --stacktrace > build_stdout.log 2>&1
+          gradle :app:assembleDebug --no-daemon --stacktrace --info > build_stdout.log 2>&1 || true
           echo "GRADLE_EXIT=$?" >> "$GITHUB_ENV"
-          echo "GRADLE_EXIT=$?" >> /tmp/exitcode.txt 2>/dev/null || true
 
-      # 把真实错误日志打印到 job 输出(可直接在 workflow 页面看到, 不依赖 artifact 下载)
-      - name: Dump Gradle log tail
-        if: always()
+      # 用 ::error:: 工作流命令, 让真实错误成为"annotation", 会显示在 run 总结页(可匿名读取)
+      - name: Report Gradle error as annotation
+        if: failure() || env.GRADLE_EXIT != '0' || always()
         run: |
-          echo "===== GRADLE_EXIT env ====="
-          echo "GRADLE_EXIT=$GRADLE_EXIT"
-          echo "===== BUILD RESULT ====="
-          grep -niE "BUILD SUCCESSFUL|BUILD FAILED|what went wrong|caused by|minimum supported|could not resolve|not found|error:|FAILURE" build_stdout.log | head -40
-          echo "===== TAIL 60 ====="
-          tail -n 60 build_stdout.log
+          if [ "$GRADLE_EXIT" != "0" ]; then
+            echo "::error::GRADLE build failed (exit $GRADLE_EXIT)"
+            echo "::error::===== BUILD RESULT ====="
+            grep -niE "BUILD FAILED|what went wrong|caused by:|minimum supported|could not (resolve|find)|FAILURE: Build failed|Execution failed" build_stdout.log | sed 's/^/::error::/'
+            echo "::error::===== TAIL 40 ====="
+            tail -n 40 build_stdout.log | sed 's/^/::error::/'
+          else
+            echo "BUILD SUCCESS"
+            tail -n 10 build_stdout.log
+          fi
 
       - name: Build release APK
         run: |
           gradle :app:assembleRelease --no-daemon --stacktrace || true
 
-      # 始终上传 APK(存在则传) + 始终上传日志
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
