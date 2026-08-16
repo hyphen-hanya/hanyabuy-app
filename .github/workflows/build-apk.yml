@@ -12,34 +12,53 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      # 安装 Gradle 8.7 (与 wrapper 的 gradle-8.7-bin.zip 一致)
-      - name: Setup Gradle
+      # setup-gradle@v4 自带 JDK; 明确 java 17 + Gradle 8.7 (与 wrapper pin 一致)
+      - name: Set up Gradle & JDK
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: "8.7"
+          java-version: "17"
 
-      - name: Versions
+      # 关键: --info 最大信息量 + --stacktrace, 重定向到文件
+      - name: Build debug APK (capture full log)
+        id: build
+        continue-on-error: true
         run: |
-          java -version
-          gradle --version
+          set +e
+          gradle :app:assembleDebug --no-daemon --stacktrace --info > build_stdout.log 2>&1
+          echo "GRADLE_EXIT=$?" >> $GITHUB_ENV
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      # 无论成败, 把真实错误 log 打出来 (解决之前读不到原因的问题)
+      - name: Show Gradle log on failure
+        if: env.GRADLE_EXIT != '0'
+        run: |
+          echo "===== TAIL of gradle log (last 200 lines) ====="
+          tail -n 200 build_stdout.log
+          echo "===== grep ERROR / FAILED / Exception ====="
+          grep -niE "error|FAILED|exception|caused by|what went wrong|minimum supported|could not resolve|not found" build_stdout.log || echo "no match"
+          exit 0
+
+      - name: Show success log & locate APK
+        if: env.GRADLE_EXIT == '0'
+        run: |
+          echo "===== stdout tail ====="
+          tail -n 60 build_stdout.log
+          ls -laR app/build/outputs/apk/ || true
 
       - name: Build release APK
-        run: gradle :app:assembleRelease --no-daemon --stacktrace || true
+        run: |
+          gradle :app:assembleRelease --no-daemon --stacktrace || true
 
-      - name: Upload APK artifacts
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: hanyabuy-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/**/*.apk
+        if: env.GRADLE_EXIT == '0'
+
+      - name: Upload gradle log
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: build_stdout.log
         if: always()
