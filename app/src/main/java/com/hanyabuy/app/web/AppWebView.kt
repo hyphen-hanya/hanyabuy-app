@@ -48,7 +48,7 @@ class AppWebView(context: Context, url: String) : WebView(context) {
                 val resources = request.resources
                 // 授予音频捕获（麦克风）。本项目只需麦克风，其他资源拒绝。
                 if (resources.isNotEmpty() &&
-                    request.origin.host.contains("hanyabuy", ignoreCase = true)
+                    request.origin.host?.contains("hanyabuy", ignoreCase = true) == true
                 ) {
                     request.grant(resources)
                 } else {
