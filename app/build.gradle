@@ -21,10 +21,27 @@ android {
         versionName "1.0.0"
     }
 
+    signingConfigs {
+        // 仅当 keystore 文件存在时启用签名(CI 从 Secret 解码出 app/hanyabuy-release.keystore)
+        release {
+            def keystoreFile = file('../hanyabuy-release.keystore')
+            if (keystoreFile.exists()) {
+                storeFile keystoreFile
+                storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'HanyaBuy2026!Secure'
+                keyAlias System.getenv('KEY_ALIAS') ?: 'hanyabuy'
+                keyPassword System.getenv('KEY_PASSWORD') ?: 'HanyaBuy2026!Secure'
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            def keystoreFile = file('../hanyabuy-release.keystore')
+            if (keystoreFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {

@@ -8,11 +8,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # 从 GitHub Secrets 读取签名配置 (第一次会跳过, 见下)
+      KEYSTORE_BASE64: ${{ secrets.HANYABU_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.HANYABU_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.HANYABU_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.HANYABU_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # JDK 必须单独用 setup-java 设置 (setup-gradle 不接收 java-version)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -24,44 +29,46 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      # 构建 debug APK, 完整日志落盘 (不 || true, 让失败真正暴露; 用 continue-on-error 保持后续诊断步骤运行)
-      - name: Build debug APK
-        id: build
-        continue-on-error: true
+      - name: Decode keystore (if secrets configured)
         run: |
-          gradle :app:assembleDebug --no-daemon --stacktrace --info > build_stdout.log 2>&1
-          echo "GRADLE_EXIT=$?" >> "$GITHUB_ENV"
-          echo "done"
-
-      # 把真实错误用 ::error:: 喷成 annotation(run总结页可读)
-      - name: Report Gradle result as annotation
-        id: report
-        run: |
-          echo "GRADLE_EXIT=$GRADLE_EXIT"
-          if [ "$GRADLE_EXIT" != "0" ]; then
-            echo "::error::GRADLE build failed (exit $GRADLE_EXIT)"
-            echo "::error::===== BUILD RESULT ====="
-            grep -niE "BUILD FAILED|what went wrong|caused by:|minimum supported|could not (resolve|find)|FAILURE: Build failed|Execution failed" build_stdout.log | sed 's/^/::error::/'
-            echo "::error::===== KOTLIN/COMPILE ERRORS (e:/error:/.kt:line) ====="
-            grep -niE "\.kt:[0-9]+|e: |error:|unresolved reference|type mismatch|expecting|Kotlin:|arguments|inferred type|The expression" build_stdout.log | sed 's/^/::error::/' | head -40
-            echo "::error::===== FULL ERROR CONTEXT (compilename area) ====="
-            awk '/compileDebugKotlin|Compilation error|CompilationException/,/^[0-9]+:BUILD (FAILED|SUCCESSFUL)/' build_stdout.log | sed 's/^/::error::/' | tail -50
-            echo "::error::===== TAIL 60 ====="
-            tail -n 60 build_stdout.log | sed 's/^/::error::/'
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p "$RUNNER_TEMP"
+            echo "$KEYSTORE_BASE64" | base64 -d > hanyabuy-release.keystore
+            echo "KEYSTORE_DECODED=1" >> "$GITHUB_ENV"
+            ls -la hanyabuy-release.keystore
           else
-            echo "BUILD SUCCESS"
-            tail -n 10 build_stdout.log
+            echo "No keystore secrets yet → building unsigned debug APK"
           fi
 
-      - name: Build release APK
+      # 构建 debug APK (始终可装)
+      - name: Build debug APK
+        id: build_debug
         run: |
-          gradle :app:assembleRelease --no-daemon --stacktrace || true
+          gradle :app:assembleDebug --no-daemon --stacktrace > build_stdout.log 2>&1 || true
+          echo "DEBUG_EXIT=$?" >> "$GITHUB_ENV"
 
-      - name: Upload APK
+      # build.gradle 已根据是否有 keystore 决定是否签名 release
+      - name: Build signed release APK
+        run: |
+          gradle :app:assembleRelease --no-daemon --stacktrace --info > release_stdout.log 2>&1 || true
+          echo "RELEASE_EXIT=$?" >> "$GITHUB_ENV"
+          echo "===== RELEASE RESULT ====="
+          grep -niE "BUILD SUCCESSFUL|BUILD FAILED|what went wrong|caused by:|FAILURE|signed|SigningConfig" release_stdout.log | head -20
+
+      - name: Locate APKs
+        run: |
+          echo "===== DEBUG APK ====="
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "no debug apk"
+          echo "===== RELEASE APK ====="
+          ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "no release apk"
+
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
           name: hanyabuy-apk
-          path: app/build/outputs/apk/**/*.apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
         if: always()
 
@@ -71,3 +78,30 @@ jobs:
           name: gradle-build-log
           path: build_stdout.log
         if: always()
+
+  # 一次性生成正式 keystore 的 job (吴总下载一次, 助手存档+配Secret后停用)
+  gen-keystore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Generate release keystore
+        run: |
+          mkdir -p keystore
+          keytool -genkeypair -v \
+            -keystore keystore/hanyabuy-release.keystore \
+            -alias hanyabuy \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass HanyaBuy2026!Secure \
+            -keypass HanyaBuy2026!Secure \
+            -dname "CN=HanyaBuy, OU=Mobile, O=HanYa Group, L=Beijing, ST=Beijing, C=CN" 2>&1 | tail -5
+          echo "===== keystore 信息 ====="
+          keytool -list -v -keystore keystore/hanyabuy-release.keystore -storepass HanyaBuy2026!Secure 2>&1 | head -20
+      - name: Upload keystore (first-time only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: hanyabuy-release-keystore
+          path: keystore/hanyabuy-release.keystore
